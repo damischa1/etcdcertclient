@@ -8,6 +8,7 @@ release:
 builds:
   - id: etcdcertget
     main: ./etcdcertget/main.go
+    binary: etcdcertget
     goos:
       - linux
     goarch:
@@ -16,6 +17,7 @@ builds:
       - -s -w
   - id: ./etcdcertput
     main: ./etcdcertput/main.go
+    binary: etcdcertput
     goos:
       - linux
     goarch:
