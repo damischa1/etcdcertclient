@@ -62,7 +62,17 @@ func ValidateCertificate(certPEM, keyPEM string) error {
 		return errors.New("failed to parse private key PEM")
 	}
 
-	privateKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	var privateKey interface{}
+	switch keyBlock.Type {
+	case "RSA PRIVATE KEY":
+		privateKey, err = x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	case "EC PRIVATE KEY":
+		privateKey, err = x509.ParseECPrivateKey(keyBlock.Bytes)
+	case "PRIVATE KEY":
+		privateKey, err = x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	default:
+		return errors.New("unsupported private key type")
+	}
 	if err != nil {
 		return fmt.Errorf("failed to parse private key: %v", err)
 	}
@@ -95,7 +105,7 @@ func ValidateCertificate(certPEM, keyPEM string) error {
 
 type PatroniConfig struct {
 	Etcd3 struct {
-		CAFile   string `yaml:"ca"`
+		CAFile   string `yaml:"cacert"`
 		CertFile string `yaml:"cert"`
 		KeyFile  string `yaml:"key"`
 		URL      string `yaml:"url"`
