@@ -16,29 +16,32 @@ import (
 
 func main() {
 	// Define and parse command-line flags
+	configFile := flag.String("config", "", "Path to the etcd3 YAML configuration file (required)")
 	etcdKey := flag.String("key", "", "The etcd key where certificates are stored to fetch (required)")
-	etcdURL := flag.String("url", "https://localhost:2379", "The etcd URL (default: https://localhost:2379)")
-	caCert := flag.String("ca", "", "Path to the CA certificate file (required)")
-	clientCert := flag.String("cert", "", "Path to the client certificate file (required)")
-	clientKey := flag.String("keyfile", "", "Path to the client private key file (required)")
 	outCert := flag.String("outcert", "", "Path to output certificate file (required)")
 	outKey := flag.String("outkey", "", "Path to the output private key file (required)")
 	flag.Parse()
 
 	// Ensure required parameters are provided
-	if *etcdKey == "" || *caCert == "" || *clientCert == "" || *clientKey == "" {
-		log.Fatalf("Usage: %s -key <etcd_key> -url <etcd_url> -ca <ca_cert> -cert <client_cert> -keyfile <client_key>", os.Args[0])
+	if *etcdKey == "" || *configFile == "" {
+		log.Fatalf("Usage: %s -config <config_file> -key <etcd_key> -outcert <output_cert> -outkey <output_key>", os.Args[0])
+	}
+
+	// Read the etcd3 YAML configuration
+	config, err := common.ReadPatroniConfig(*configFile)
+	if err != nil {
+		log.Fatalf("Failed to read etcd3 YAML configuration: %v", err)
 	}
 
 	// Load the certificates
-	tlsConfig, err := common.CreateTLSConfig(*caCert, *clientCert, *clientKey)
+	tlsConfig, err := common.CreateTLSConfig(config.Etcd3.CAFile, config.Etcd3.CertFile, config.Etcd3.KeyFile)
 	if err != nil {
 		log.Fatalf("Failed to create TLS configuration: %v", err)
 	}
 
 	// Connect to etcd
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{*etcdURL},
+		Endpoints:   []string{config.Etcd3.URL},
 		TLS:         tlsConfig,
 		DialTimeout: 5 * time.Second,
 	})
@@ -80,6 +83,12 @@ func main() {
 			log.Fatalf("Error parsing key value to Certificate: ", err)
 		}
 
+		// Validate that the SSL certificate is not expired and matches the private key
+		err = common.ValidateCertificate(certificate.Certificate, certificate.PrivateKey)
+		if err != nil {
+			log.Fatalf("Error validating certificate: %v", err)
+		}
+
 		// Write JSON content to the output file
 		err = os.WriteFile(*outCert, []byte(certificate.Certificate), 0644)
 		if err != nil {
@@ -89,7 +98,7 @@ func main() {
 		// Write JSON content to the output file
 		err = os.WriteFile(*outKey, []byte(certificate.PrivateKey), 0644)
 		if err != nil {
-			log.Fatalf("Failed to write to file '%s': %v", *outCert, err)
+			log.Fatalf("Failed to write to file '%s': %v", *outKey, err)
 		}
 
 		// Update the last version file

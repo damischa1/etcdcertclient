@@ -1,8 +1,12 @@
 package common
 
 import (
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -38,6 +42,55 @@ func CreateTLSConfig(caCertPath, clientCertPath, clientKeyPath string) (*tls.Con
 		RootCAs:      caCertPool,
 		Certificates: []tls.Certificate{clientCert},
 	}, nil
+}
+
+func ValidateCertificate(certPEM, keyPEM string) error {
+	// Decode the certificate PEM
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return errors.New("failed to parse certificate PEM")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse certificate: %v", err)
+	}
+
+	// Decode the private key PEM
+	keyBlock, _ := pem.Decode([]byte(keyPEM))
+	if keyBlock == nil {
+		return errors.New("failed to parse private key PEM")
+	}
+
+	privateKey, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse private key: %v", err)
+	}
+
+	// Validate the certificate's validity period
+	now := time.Now()
+	if now.Before(cert.NotBefore) {
+		return fmt.Errorf("certificate is not valid yet: %v", cert.NotBefore)
+	}
+	if now.After(cert.NotAfter) {
+		return fmt.Errorf("certificate has expired: %v", cert.NotAfter)
+	}
+
+	// Validate that the certificate matches the private key
+	switch key := privateKey.(type) {
+	case *rsa.PrivateKey:
+		if cert.PublicKey.(*rsa.PublicKey).N.Cmp(key.N) != 0 {
+			return errors.New("certificate does not match private key")
+		}
+	case *ecdsa.PrivateKey:
+		if cert.PublicKey.(*ecdsa.PublicKey).X.Cmp(key.X) != 0 || cert.PublicKey.(*ecdsa.PublicKey).Y.Cmp(key.Y) != 0 {
+			return errors.New("certificate does not match private key")
+		}
+	default:
+		return errors.New("unsupported private key type")
+	}
+
+	return nil
 }
 
 type PatroniConfig struct {
