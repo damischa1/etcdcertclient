@@ -6,14 +6,16 @@ release:
     name: etcdcertclient
 
 builds:
-  - main: ./etcdcertget
+  - id: etcdcertget
+    main: ./etcdcertget/main.go
     goos:
       - linux
     goarch:
       - amd64
     ldflags:
       - -s -w
-  - main: ./etcdcertput
+  - id: ./etcdcertput
+    main: ./etcdcertput/main.go
     goos:
       - linux
     goarch:
